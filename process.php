@@ -13,7 +13,11 @@
             'IE' => $l[6],
             'COD_MUN' => $l[7],
             'IM' => $l[8],
-            'SUFRAMA' => $l[9]
+            'SUFRAMA' => $l[9],
+            'NOTAS' => array(),
+            'CLI_FOR' => array(),
+            'UNI_MED' => array(),
+            'PROD_SERV' => array()
         );
     }
 
@@ -78,7 +82,8 @@
             'VL_COFINS' => $l[18],
             'VL_PIS_RET' => $l[19],
             'VL_COFINS_RET' => $l[20],
-            'VL_ISS' => $l[21]
+            'VL_ISS' => $l[21],
+            'ITENS' => array()
         );
     }
 
@@ -125,6 +130,12 @@
         if (!(preg_match($PATTERN_DIREND, $PATH_ORIGIN))){
             $PATH_ORIGIN .= '/';
         }
+        if (!(preg_match($PATTERN_DIREND, $PATH_DEST))){
+            $PATH_DEST .= '/';
+        }
+        if (!(is_dir($PATH_DEST))){
+            mkdir($PATH_DEST);
+        }
     }
 
     //verificação de cnpj
@@ -137,11 +148,9 @@
 
     //inicializa objetos necessarios
     $unidades_negocio = array();
-    $cli_for = array();
-    $uni_med = array();
-    $prod_serv = array();
-    $nf = array();
-    $inf = array();
+    $cnpj_atual = '';
+
+    $quant = array(0,0,0,0,0,0);
 
     foreach($paths as $path){
         //verifica extensao do arquivo
@@ -156,33 +165,53 @@
             //separa valores e mapeia dados para array key value
             $line = explode('|', $reg);
             switch ($line[1]) {
+
                 case '0140':
                     $un = read_Unidade_Negocio($line);
                     $unidades_negocio[$un['CNPJ']] = $un;
+                    $cnpj_atual = $un['CNPJ'];
                     break;
+
                 case '0150':
                     $cf = read_Cliente_Fornecedor($line);
-                    $cli_for[$cf['COD_PART']];
+                    array_push($unidades_negocio[$cnpj_atual]['CLI_FOR'], $cf);
                     break;
+
                 case '0190':
                     $un = read_Unidade_Medida($line);
-                    $uni_med[$un['UNID']] = $un;
+                    array_push($unidades_negocio[$cnpj_atual]['UNI_MED'], $un);
                     break;
+
                 case '0200':
                     $ps = read_Produto_Servico($line);
-                    $prod_serv[$ps['COD_ITEM']] = $ps;
+                    array_push($unidades_negocio[$cnpj_atual]['PROD_SERV'], $ps);
                     break;
+
                 case 'A100':
                     $nf = read_Nota_Fiscal($line);
-                    $prod_serv[$nf['NUM_DOC']] = $nf;
+                    array_push($unidades_negocio[$cnpj_atual]['NOTAS'], $nf);
                     break;
+
                 case 'A170':
                     $inf = read_Item_Nota_Fiscal($line);
-                    $prod_serv[$inf['COD_ITEM']] = $inf;
+                    array_push($unidades_negocio[$cnpj_atual]['NOTAS'][count($unidades_negocio[$cnpj_atual]['NOTAS']) - 1]['ITENS'], $inf);
                     break;
             }
         }
     }
+    
+    //criacao arquivos de saida
+    // $UNIDADES_DE_NEGOCIO = array();
 
+    // foreach($unidades_negocio as $un){
+    //     if (!(is_dir($PATH_DEST.$un['CNPJ']))){
+    //         mkdir($PATH_DEST.$un['CNPJ'].'/efd-piscofins');
+    //     }
+
+    //     $res = array();
+        
+
+    //     array_push($UNIDADES_DE_NEGOCIO);
+    // }
     
 ?>
