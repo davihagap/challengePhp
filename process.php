@@ -162,7 +162,7 @@
         //le o arquivo e percorre cada um de suas linhas
         $file = file($PATH_ORIGIN.$path);
         foreach($file as $reg){
-            //separa valores e mapeia dados para array key value
+            //extrai os dados necessários
             $line = explode('|', $reg);
             switch ($line[1]) {
 
@@ -174,22 +174,23 @@
 
                 case '0150':
                     $cf = read_Cliente_Fornecedor($line);
-                    array_push($unidades_negocio[$cnpj_atual]['CLI_FOR'], $cf);
+                    $unidades_negocio[$cnpj_atual]['CLI_FOR'][$cf['COD_PART']] = $cf;
                     break;
 
                 case '0190':
                     $un = read_Unidade_Medida($line);
-                    array_push($unidades_negocio[$cnpj_atual]['UNI_MED'], $un);
+                    $unidades_negocio[$cnpj_atual]['UNI_MED'][$un['UNID']] = $un;
                     break;
 
                 case '0200':
                     $ps = read_Produto_Servico($line);
-                    array_push($unidades_negocio[$cnpj_atual]['PROD_SERV'], $ps);
+                    $unidades_negocio[$cnpj_atual]['PROD_SERV'][$ps['COD_ITEM']]= $ps;
                     break;
 
                 case 'A100':
                     $nf = read_Nota_Fiscal($line);
                     array_push($unidades_negocio[$cnpj_atual]['NOTAS'], $nf);
+                    //var_dump($nf);
                     break;
 
                 case 'A170':
@@ -199,19 +200,72 @@
             }
         }
     }
+
+    var_dump($unidades_negocio[$CNPJ]);
     
-    //criacao arquivos de saida
-    // $UNIDADES_DE_NEGOCIO = array();
+    //formatacao dos dados para saida
+    foreach($unidades_negocio as $un){
+        echo ('entrou em unidades de negocio||||');
+        if ($un['CNPJ'] != $CNPJ){
+            continue;
+        }
+        if (!(is_dir($PATH_DEST.$un['CNPJ']))){
+            mkdir($PATH_DEST.$un['CNPJ']);
+            mkdir($PATH_DEST.$un['CNPJ'].'/efd-piscofins');
+        }
 
-    // foreach($unidades_negocio as $un){
-    //     if (!(is_dir($PATH_DEST.$un['CNPJ']))){
-    //         mkdir($PATH_DEST.$un['CNPJ'].'/efd-piscofins');
-    //     }
+        $notas = array();
+        $notas['VENDAS'] = array();
+        $notas['COMPRAS'] = array();
+        foreach($un['NOTAS'] as $n){
+            echo ('entrou em notas||||');
+            $indice = $n['IND_OPER'] == 1 ? 'VENDAS' : 'COMPRAS';
+            $atributo_doc = $n['IND_OPER'] == 1 ? 'DOC_CLIENTE' : 'CNPJ_FORNECEDOR';
+            $participante_nome = '';
+            $participante_doc = '';
+            if($n['COD_PART'] != ''){
+                $participante_doc = $un['CLI_FOR'][$n['COD_PART']]['CPF'] == '' ? $un['CLI_FOR'][$n['COD_PART']]['CNPJ'] : $un['CLI_FOR'][$n['COD_PART']]['CPF'];
+                $participante_nome = $un['CLI_FOR'][$n['COD_PART']]['NOME'];
+            }
+            $itens_formatado = array();
+            foreach($n['ITENS'] as $i){
+                $desc_item = $un['PROD_SERV'][$i['COD_ITEM']]['DESCR_ITEM'];
+                $unid_item = $un['PROD_SERV'][$i['COD_ITEM']]['UNID_INV'] == '' ? '' : $un['UNI_MED'][$un['PROD_SERV'][$i['COD_ITEM']]['UNID_INV']];
+                array_push($itens_formatado, array(
+                    'DATA' => $n['DT_DOC'],
+                    'CODIGO' => $i['COD_ITEM'],
+                    'DESCRICAO' => $desc_item,
+                    'UNIDADE' => $unid_item,
+                    'TOTAL' => $i['VL_ITEM']
+                ));
+            }
+            $nota_formatado = array(
+                'DATA' => $n['DT_DOC'],
+                $atributo_doc => $participante_doc,
+                'RAZAO_SOCIAL' => $participante_nome,
+                'VALOR_TOTAL' => $n['VL_DOC'],
+                'ITENS' => $itens
+                
+            );
 
-    //     $res = array();
+            $data = date_create_from_format('dmY', $n['DT_DOC']);
+            array_push($notas[$indice][$data->format('Y/m')], $nota_formatado);
+        } 
+
+        $unidade_formatado = array(
+            'CNPJ' => $un['CNPJ'],
+            'NOME' => $un['NOME'],
+            'NOTAS' => $notas
+        );
+
+        $saida = json_encode($unidade_formatado);
         
+        //criacao do arquivo de saida
+        $f = fopen($PATH_DEST.$un['CNPJ'].'/efd-piscofins\/'.$un['CNPJ'].'_compras_vendas.json', 'w');
+        fwrite($f, $saida);
+        fclose($f);
+                
 
-    //     array_push($UNIDADES_DE_NEGOCIO);
-    // }
+    }
     
 ?>
