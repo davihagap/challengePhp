@@ -150,8 +150,6 @@
     $unidades_negocio = array();
     $cnpj_atual = '';
 
-    $quant = array(0,0,0,0,0,0);
-
     foreach($paths as $path){
         //verifica extensao do arquivo
         if (!(preg_match($PATTERN_ALLOWED_EXTENSIONS, $path))){
@@ -168,7 +166,9 @@
 
                 case '0140':
                     $un = read_Unidade_Negocio($line);
-                    $unidades_negocio[$un['CNPJ']] = $un;
+                    if(!isset($unidades_negocio[$un['CNPJ']])){
+                        $unidades_negocio[$un['CNPJ']] = $un;
+                    }
                     $cnpj_atual = $un['CNPJ'];
                     break;
 
@@ -187,10 +187,13 @@
                     $unidades_negocio[$cnpj_atual]['PROD_SERV'][$ps['COD_ITEM']]= $ps;
                     break;
 
+                case 'A010':
+                    $cnpj_atual = $line[2];
+                    break;
+
                 case 'A100':
                     $nf = read_Nota_Fiscal($line);
                     array_push($unidades_negocio[$cnpj_atual]['NOTAS'], $nf);
-                    //var_dump($nf);
                     break;
 
                 case 'A170':
@@ -200,12 +203,9 @@
             }
         }
     }
-
-    var_dump($unidades_negocio[$CNPJ]);
     
     //formatacao dos dados para saida
     foreach($unidades_negocio as $un){
-        echo ('entrou em unidades de negocio||||');
         if ($un['CNPJ'] != $CNPJ){
             continue;
         }
@@ -217,8 +217,9 @@
         $notas = array();
         $notas['VENDAS'] = array();
         $notas['COMPRAS'] = array();
+
         foreach($un['NOTAS'] as $n){
-            echo ('entrou em notas||||');
+
             $indice = $n['IND_OPER'] == 1 ? 'VENDAS' : 'COMPRAS';
             $atributo_doc = $n['IND_OPER'] == 1 ? 'DOC_CLIENTE' : 'CNPJ_FORNECEDOR';
             $participante_nome = '';
@@ -227,10 +228,11 @@
                 $participante_doc = $un['CLI_FOR'][$n['COD_PART']]['CPF'] == '' ? $un['CLI_FOR'][$n['COD_PART']]['CNPJ'] : $un['CLI_FOR'][$n['COD_PART']]['CPF'];
                 $participante_nome = $un['CLI_FOR'][$n['COD_PART']]['NOME'];
             }
+
             $itens_formatado = array();
             foreach($n['ITENS'] as $i){
                 $desc_item = $un['PROD_SERV'][$i['COD_ITEM']]['DESCR_ITEM'];
-                $unid_item = $un['PROD_SERV'][$i['COD_ITEM']]['UNID_INV'] == '' ? '' : $un['UNI_MED'][$un['PROD_SERV'][$i['COD_ITEM']]['UNID_INV']];
+                $unid_item = $un['PROD_SERV'][$i['COD_ITEM']]['UNID_INV'] == '' ? '' : $un['UNI_MED'][$un['PROD_SERV'][$i['COD_ITEM']]['UNID_INV']]['UNID'];
                 array_push($itens_formatado, array(
                     'DATA' => $n['DT_DOC'],
                     'CODIGO' => $i['COD_ITEM'],
@@ -244,11 +246,14 @@
                 $atributo_doc => $participante_doc,
                 'RAZAO_SOCIAL' => $participante_nome,
                 'VALOR_TOTAL' => $n['VL_DOC'],
-                'ITENS' => $itens
+                'ITENS' => $itens_formatado
                 
             );
 
             $data = date_create_from_format('dmY', $n['DT_DOC']);
+            if(!isset($notas[$indice][$data->format('Y/m')])){
+                $notas[$indice][$data->format('Y/m')] = array();
+            }
             array_push($notas[$indice][$data->format('Y/m')], $nota_formatado);
         } 
 
@@ -258,10 +263,10 @@
             'NOTAS' => $notas
         );
 
-        $saida = json_encode($unidade_formatado);
+        $saida = utf8_encode(json_encode($unidade_formatado));
         
         //criacao do arquivo de saida
-        $f = fopen($PATH_DEST.$un['CNPJ'].'/efd-piscofins\/'.$un['CNPJ'].'_compras_vendas.json', 'w');
+        $f = fopen($PATH_DEST.$un['CNPJ'].'/efd-piscofins/'.$un['CNPJ'].'_compras_vendas.json', 'w');
         fwrite($f, $saida);
         fclose($f);
                 
